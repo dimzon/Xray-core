@@ -312,7 +312,9 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				if err := json.Unmarshal(rawUser, account); err != nil {
 					return nil, errors.New(`VLESS users: invalid user`).Base(err)
 				}
-				// validateOutboundTransportSecurity needs to see these
+				// AIROUTER: проверка validateOutboundTransportSecurity удалена,
+// эти поля больше никто не смотрит, но оставляем их: они нужны
+// упрощённому стилю конфига ниже.
 				c.Encryption = account.Encryption
 				c.Address = rec.Address
 				if account.Reverse != nil { // may not be reached: error json unmarshal
