@@ -17,6 +17,29 @@ func Authenticate(b []byte) uint32 {
 	return fnv1hash.Sum32()
 }
 
+// AIROUTER: возвращён, удалён апстримом в d7fa207. Нужен веткам
+// SecurityType_NONE в client.go и server.go: ноды vmess с security=none
+// из подписок иначе нечем кодировать.
+type NoOpAuthenticator struct{}
+
+func (NoOpAuthenticator) NonceSize() int {
+	return 0
+}
+
+func (NoOpAuthenticator) Overhead() int {
+	return 0
+}
+
+// Seal implements AEAD.Seal().
+func (NoOpAuthenticator) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
+	return append(dst[:0], plaintext...)
+}
+
+// Open implements AEAD.Open().
+func (NoOpAuthenticator) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
+	return append(dst[:0], ciphertext...), nil
+}
+
 // GenerateChacha20Poly1305Key generates a 32-byte key from a given 16-byte array.
 func GenerateChacha20Poly1305Key(b []byte) []byte {
 	key := make([]byte, 32)
