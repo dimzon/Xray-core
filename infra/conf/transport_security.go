@@ -358,8 +358,12 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.RejectUnknownSni = c.RejectUnknownSNI
 	config.MasterKeyLog = c.MasterKeyLog
 
+	// AIROUTER: allowInsecure возвращён. Апстрим превратил его в жёсткую
+	// ошибку конфига (а до того была таймбомба: после 2026-06-01 флаг
+	// переставал работать). Ноды из подписок идут с allowInsecure=1, и без
+	// этого флага самоподписанные серты роняют всё подключение.
 	if c.AllowInsecure {
-		return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"(pcs) and "verifyPeerCertByName"(vcn)`)
+		config.AllowInsecure = true
 	}
 	if c.PinnedPeerCertSha256 != "" {
 		for v := range strings.SplitSeq(c.PinnedPeerCertSha256, ",") {
