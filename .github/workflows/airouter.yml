@@ -1,0 +1,92 @@
+# AIROUTER: сборка форка и публикация бинарников.
+#
+# Триггеры:
+#   - пуш в airouter/**  -> сборка windows-amd64 + linux-amd64, артефакты;
+#   - тег вида v26.9.30-airouter1 -> то же плюс GitHub Release с бинарниками.
+# В версию подставляется короткий SHA с суффиксом -airouter, чтобы наш бинарь
+# отличался от стокового в `xray version`.
+
+name: AIROUTER build
+
+on:
+  push:
+    branches:
+      - "airouter/**"
+    tags:
+      - "v*-airouter*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            out: xray.exe
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            out: xray
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test affected packages
+        shell: bash
+        run: |
+          # TestGeodataConfig в infra/conf читает resources/geoip.dat —
+          # в чистом чекауте его нет, без него весь пакет падает. Тащим
+          # те же файлы, что и апстрим в scheduled-assets-update.yml.
+          mkdir -p resources
+          for f in geoip geosite; do
+            [ -s "resources/$f.dat" ] || curl -sL "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/$f.dat" -o "resources/$f.dat"
+          done
+          go test ./transport/internet/tls/ ./proxy/shadowsocks/ ./proxy/vmess/... ./common/protocol/ ./infra/conf/
+
+      - name: Build
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          COMMID="$(git rev-parse --short HEAD)-airouter"
+          go build -trimpath -buildvcs=false -o "dist/${{ matrix.out }}" \
+            -ldflags "-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" \
+            ./main
+          ./dist/${{ matrix.out }} version 2>&1 | head -2 || dist/${{ matrix.out }} version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xray-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/${{ matrix.out }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la dist/
+          gh release create "${GITHUB_REF_NAME}" dist/xray.exe dist/xray \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --notes-start-tag "$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo '')"
