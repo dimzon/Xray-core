@@ -222,39 +222,8 @@ type OutboundDetourConfig struct {
 	TargetStrategy string           `json:"targetStrategy"`
 }
 
-func requiresTransportSecurity(address *Address) bool {
-	if address == nil || address.Address == nil {
-		return false
-	}
-	if address.Family().IsIP() {
-		return !geodata.GetPrivateIPMatcher().Match(address.IP())
-	}
-	domain := strings.TrimSuffix(strings.ToLower(address.Domain()), ".")
-	return !geodata.GetPrivateDomainMatcher().MatchAny(domain)
-}
-
-func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
-	if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.GetSecurityType() != "" {
-		return nil
-	}
-
-	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
-		if vlessCfg.Encryption != "" && vlessCfg.Encryption != "none" {
-			return nil
-		}
-		if requiresTransportSecurity(vlessCfg.Address) {
-			return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
-		}
-	}
-
-	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
-		if requiresTransportSecurity(tjCfg.Servers[0].Address) {
-			return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
-		}
-	}
-
-	return nil
-}
+// AIROUTER: requiresTransportSecurity и validateOutboundTransportSecurity
+// удалены. См. комментарий на месте вызова в OutboundDetourConfig.Build.
 
 // Build implements Buildable.
 func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
@@ -334,9 +303,12 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
-	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
-		return nil, err
-	}
+
+	// AIROUTER: проверка validateOutboundTransportSecurity удалена вместе с
+	// requiresTransportSecurity (см. ниже). Апстрим запретил нешифрованные
+	// исходящие на публичные адреса в d7fa207, из-за чего одна такая нода
+	// роняла загрузку всего конфига. Ноды из подписок бывают без шифрования,
+	// и это их дело, а не загрузчика конфига.
 
 	if fc, ok := ts.(*freedom.Config); ok {
 		if senderSettings.StreamSettings != nil &&

@@ -11,6 +11,11 @@ enum SecurityType {
   AUTO = 2;
   AES128_GCM = 3;
   CHACHA20_POLY1305 = 4;
+  // AIROUTER: возвращены. Апстрим удалил их в d7fa207, из-за чего ссылки
+  // vmess с security=none/zero перестали разбираться. Номера те же, со
+  // старыми бинарями совместимо.
+  NONE = 5;
+  ZERO = 6;
 }
 
 message SecurityConfig {
